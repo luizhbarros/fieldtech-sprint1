@@ -15,4 +15,7 @@
       <module name="monitoramento-vegetacao" options="-parameters" />
     </option>
   </component>
+  <component name="TypeScriptCompiler">
+    <option name="useServicePoweredTypesWasEnabledByExperiment" value="true" />
+  </component>
 </project>
