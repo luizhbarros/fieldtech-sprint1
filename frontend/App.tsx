@@ -1,30 +1,28 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, StatusBar, Platform, Alert } from 'react-native';
-import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialCommunityIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
 
-// --- CONFIGURAÇÃO DA API ---
-// ATENÇÃO: Se for rodar no celular físico (Expo Go), troque 'localhost' pelo IP do seu Mac (ex: 192.168.1.15)
-const IP_BACKEND = 'localhost';
+// Importações da nova organização do projeto (Sprint 2)
+import { Sensor, Medicao, StatusMedicao } from './src/types';
+import { calcularStatus } from './src/utils/status';
+
+// Configuração da API
+const IP_BACKEND = 'localhost'; // Troque para o IP local ao usar no Expo Go
 const API_URL = `http://${IP_BACKEND}:8080/api/sensores`;
-
-// Tipagem
-type Medicao = {
-  id: number;
-  sensor: string;
-  valor: number;
-  status: "normal" | "alerta" | "critico";
-};
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
+// Mock de múltiplos sensores para simulação (Sprint 2)
+const SENSORES_MOCK: Sensor[] = [
+  { id: 1, nome: "Termômetro Caldeira", tipo: "Temperatura", unidade: "°C" },
+  { id: 2, nome: "Nó LoRa V4 - Km 42", tipo: "Vegetação", unidade: "cm" },
+  { id: 3, nome: "Umidade Solo - Setor Sul", tipo: "Umidade", unidade: "%" },
+];
+
 const TEMAS = {
   light: {
-    background: '#F0F2F5',
-    card: '#FFFFFF',
-    textoPrincipal: '#1A1A1A',
-    textoSecundario: '#757575',
-    primaria: '#3949AB',
-    divisor: '#EEEEEE',
+    background: '#F0F2F5', card: '#FFFFFF', textoPrincipal: '#1A1A1A',
+    textoSecundario: '#757575', primaria: '#3949AB', divisor: '#EEEEEE',
     status: {
       normalBg: '#E8F5E9', normalText: '#2E7D32',
       alertaBg: '#FFFDE7', alertaText: '#F9A825',
@@ -32,12 +30,8 @@ const TEMAS = {
     }
   },
   dark: {
-    background: '#121212',
-    card: '#1E1E1E',
-    textoPrincipal: '#FFFFFF',
-    textoSecundario: '#A0A0A0',
-    primaria: '#5C6BC0',
-    divisor: '#333333',
+    background: '#121212', card: '#1E1E1E', textoPrincipal: '#FFFFFF',
+    textoSecundario: '#A0A0A0', primaria: '#5C6BC0', divisor: '#333333',
     status: {
       normalBg: '#1B5E20', normalText: '#A5D6A7',
       alertaBg: '#F57F17', alertaText: '#FFE082',
@@ -47,148 +41,150 @@ const TEMAS = {
 };
 
 export default function App() {
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isModoAPI, setIsModoAPI] = useState(false);
+
+  // Estado para alternância de sensores (Sprint 2)
+  const [indiceSensorAtual, setIndiceSensorAtual] = useState(0);
+
+  // Estado inicial tipado com a nova modelagem
   const [medicao, setMedicao] = useState<Medicao>({
     id: 1,
-    sensor: "Termômetro Caldeira 01",
+    sensor: SENSORES_MOCK[0],
     valor: 22.5,
+    data: new Date(),
     status: "normal"
   });
 
-  const [isDarkMode, setIsDarkMode] = useState(false);
-
-  // NOVO ESTADO: Controle de Modo Local vs Modo Integrado (API)
-  const [isModoAPI, setIsModoAPI] = useState(false);
-
   const temaAtivo = isDarkMode ? TEMAS.dark : TEMAS.light;
+  const sensorSelecionado = SENSORES_MOCK[indiceSensorAtual];
+
+  // Alternar entre os sensores mockados
+  const alternarSensor = () => {
+    const proximoIndice = (indiceSensorAtual + 1) % SENSORES_MOCK.length;
+    setIndiceSensorAtual(proximoIndice);
+  };
 
   const gerarNovaMedicao = async () => {
-    const valorAleatorio = Math.floor(Math.random() * 101) + 10;
-    let novoStatus: "normal" | "alerta" | "critico" = "normal";
-
-    if (valorAleatorio >= 90) novoStatus = "critico";
-    else if (valorAleatorio >= 70) novoStatus = "alerta";
+    const valorAleatorio = Math.floor(Math.random() * 120) + 10;
+    const novoStatus = calcularStatus(valorAleatorio); // Usando a lógica do arquivo separado
+    const dataAtual = new Date();
 
     if (!isModoAPI) {
-      // === MODO LOCAL (Simulação isolada) ===
+      // MODO LOCAL
       setMedicao(prev => ({
         id: prev.id + 1,
-        sensor: "Sensor Local - Aleatório",
+        sensor: sensorSelecionado,
         valor: valorAleatorio,
+        data: dataAtual,
         status: novoStatus
       }));
     } else {
-      // === MODO INTEGRADO (Conexão real com Spring Boot) ===
+      // MODO INTEGRADO (Mantendo a compatibilidade com a sua API Spring)
       const novoSensorParaBackend = {
-        nome: `Nó LoRa V4 - Km ${Math.floor(Math.random() * 100)}`,
-        tipo: "vegetação",
-        local: "Rodovia Bandeirantes",
-        unidade: "cm",
+        nome: sensorSelecionado.nome,
+        tipo: sensorSelecionado.tipo,
+        local: "Laboratório / Rodovia",
+        unidade: sensorSelecionado.unidade,
         limiteMinimo: 0.0,
-        limiteMaximo: valorAleatorio, // Usando o valor aleatório como limite para refletir na tela
+        limiteMaximo: valorAleatorio, // Passando o valor como limiteMaximo para refletir na API por enquanto
         ativo: true
       };
 
       try {
         const response = await fetch(API_URL, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(novoSensorParaBackend)
         });
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`HTTP status: ${response.status}`);
         const data = await response.json();
 
-        // Atualiza a tela com a resposta oficial do banco H2 (com o ID gerado lá)
         setMedicao({
           id: data.id,
-          sensor: data.nome,
+          sensor: { ...sensorSelecionado, id: data.id },
           valor: data.limiteMaximo,
+          data: dataAtual,
           status: novoStatus
         });
-
       } catch (error) {
         console.error("Erro na API:", error);
-        Alert.alert(
-            "Erro de Conexão",
-            "Não foi possível conectar ao Spring Boot. Se você estiver usando o celular, certifique-se de trocar 'localhost' pelo IP do seu Mac no código."
-        );
-        // Desativa o modo API para não travar o app
+        Alert.alert("Erro", "Conexão falhou. Desativando Modo API.");
         setIsModoAPI(false);
       }
     }
   };
 
-  const getConfigStatus = (status: string): { bg: string; text: string; icon: IconName } => {
+  const getConfigStatus = (status: StatusMedicao): { bg: string; text: string; icon: IconName } => {
     switch (status) {
-      case 'normal':
-        return { bg: temaAtivo.status.normalBg, text: temaAtivo.status.normalText, icon: 'check-circle' };
-      case 'alerta':
-        return { bg: temaAtivo.status.alertaBg, text: temaAtivo.status.alertaText, icon: 'alert' };
-      case 'critico':
-        return { bg: temaAtivo.status.criticoBg, text: temaAtivo.status.criticoText, icon: 'fire' };
-      default:
-        return { bg: temaAtivo.divisor, text: temaAtivo.textoPrincipal, icon: 'help-circle' };
+      case 'normal': return { bg: temaAtivo.status.normalBg, text: temaAtivo.status.normalText, icon: 'check-circle' };
+      case 'alerta': return { bg: temaAtivo.status.alertaBg, text: temaAtivo.status.alertaText, icon: 'alert' };
+      case 'critico': return { bg: temaAtivo.status.criticoBg, text: temaAtivo.status.criticoText, icon: 'fire' };
+      default: return { bg: temaAtivo.divisor, text: temaAtivo.textoPrincipal, icon: 'help-circle' };
     }
   };
 
   const statusConfig = getConfigStatus(medicao.status);
 
+  // Formatação de data simples
+  const formatarData = (data: Date) => {
+    return `${data.toLocaleDateString('pt-BR')} às ${data.toLocaleTimeString('pt-BR')}`;
+  };
+
   return (
       <SafeAreaView style={[styles.container, { backgroundColor: temaAtivo.background }]}>
         <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={temaAtivo.background} />
 
-        {/* Cabeçalho */}
+        {/* Header */}
         <View style={[styles.header, { backgroundColor: temaAtivo.card, borderBottomColor: temaAtivo.divisor }]}>
           <View style={styles.headerLeft}>
-            <MaterialCommunityIcons name="remote-desktop" size={28} color={temaAtivo.primaria} />
+            <MaterialCommunityIcons name="broadcast" size={28} color={temaAtivo.primaria} />
             <Text style={[styles.tituloSistema, { color: temaAtivo.textoPrincipal }]}>IoT Monitor</Text>
           </View>
-
           <View style={styles.headerRight}>
-            {/* NOVO: Toggle de Modo API vs Local */}
-            <TouchableOpacity
-                onPress={() => setIsModoAPI(!isModoAPI)}
-                style={[styles.apiToggle, { backgroundColor: isModoAPI ? '#4CAF50' : '#9E9E9E' }]}
-            >
+            <TouchableOpacity onPress={() => setIsModoAPI(!isModoAPI)} style={[styles.apiToggle, { backgroundColor: isModoAPI ? '#4CAF50' : '#9E9E9E' }]}>
               <MaterialCommunityIcons name={isModoAPI ? "cloud-check" : "cloud-off-outline"} size={16} color="#FFF" />
               <Text style={styles.apiToggleText}>{isModoAPI ? "API" : "Local"}</Text>
             </TouchableOpacity>
-
             <TouchableOpacity onPress={() => setIsDarkMode(!isDarkMode)} style={styles.themeToggle}>
               <MaterialCommunityIcons name={isDarkMode ? "weather-night" : "weather-sunny"} size={24} color={temaAtivo.textoPrincipal} />
             </TouchableOpacity>
           </View>
-        </View>
+        </View> {/* <--- CORRIGIDO AQUI: Fecha a View do Header */}
 
-        {/* Conteúdo Centralizado */}
         <View style={styles.content}>
-          <View style={[styles.card, { backgroundColor: temaAtivo.card }]}>
+          {/* Controle de Alternância de Sensores */}
+          <View style={styles.sensorSelector}>
+            <Text style={[styles.selectorTitle, { color: temaAtivo.textoSecundario }]}>Monitorando no momento:</Text>
+            <TouchableOpacity style={[styles.selectorButton, { backgroundColor: temaAtivo.card, borderColor: temaAtivo.primaria }]} onPress={alternarSensor}>
+              <Ionicons name="swap-horizontal" size={20} color={temaAtivo.primaria} />
+              <Text style={[styles.selectorButtonText, { color: temaAtivo.primaria }]}>{sensorSelecionado.nome}</Text>
+            </TouchableOpacity>
+          </View>
 
-            {/* Badge indicando o modo atual em cima do card */}
+          <View style={[styles.card, { backgroundColor: temaAtivo.card }]}>
             <View style={[styles.modoBadge, { backgroundColor: isModoAPI ? '#E8F5E9' : '#EEEEEE' }]}>
               <Text style={{ color: isModoAPI ? '#2E7D32' : '#757575', fontSize: 12, fontWeight: 'bold' }}>
-                {isModoAPI ? "DADOS REAIS (SPRING BOOT)" : "DADOS FALSOS (MOCK)"}
+                {isModoAPI ? "DADOS SPRING BOOT" : "SIMULAÇÃO LOCAL"}
               </Text>
             </View>
 
             <View style={styles.cardHeader}>
-              <View style={styles.sensorInfo}>
-                <FontAwesome5 name="satellite-dish" size={16} color={temaAtivo.textoSecundario} />
-                <Text style={[styles.labelSensor, { color: temaAtivo.textoSecundario }]}>SENSOR H2</Text>
+              <View style={styles.badgeTipo}>
+                <Text style={styles.badgeTipoText}>{medicao.sensor.tipo.toUpperCase()}</Text>
               </View>
-              <Text style={[styles.nomeSensor, { color: temaAtivo.textoPrincipal }]}>{medicao.sensor}</Text>
+              <Text style={[styles.nomeSensor, { color: temaAtivo.textoPrincipal }]}>{medicao.sensor.nome}</Text>
+              <Text style={[styles.dataText, { color: temaAtivo.textoSecundario }]}>
+                Última leitura: {formatarData(medicao.data)}
+              </Text>
             </View>
 
             <View style={[styles.divisor, { backgroundColor: temaAtivo.divisor }]} />
 
             <View style={styles.valorContainer}>
               <Text style={[styles.valorDestaque, { color: temaAtivo.primaria }]}>{medicao.valor.toFixed(1)}</Text>
-              <Text style={[styles.unidade, { color: temaAtivo.primaria }]}>cm</Text>
+              <Text style={[styles.unidade, { color: temaAtivo.primaria }]}>{medicao.sensor.unidade}</Text>
             </View>
 
             <View style={[styles.badge, { backgroundColor: statusConfig.bg }]}>
@@ -198,20 +194,15 @@ export default function App() {
               </Text>
             </View>
 
-            <Text style={[styles.idText, { color: temaAtivo.textoSecundario }]}>Registro ID: #{medicao.id}</Text>
+            <Text style={[styles.idText, { color: temaAtivo.textoSecundario }]}>Reg. ID: #{medicao.id} | Sensor ID: {medicao.sensor.id}</Text>
           </View>
         </View>
 
-        {/* Botão Inferior */}
         <View style={styles.footer}>
-          <TouchableOpacity
-              style={[styles.botao, { backgroundColor: temaAtivo.primaria }]}
-              onPress={gerarNovaMedicao}
-              activeOpacity={0.8}
-          >
+          <TouchableOpacity style={[styles.botao, { backgroundColor: temaAtivo.primaria }]} onPress={gerarNovaMedicao} activeOpacity={0.8}>
             <MaterialCommunityIcons name={isModoAPI ? "database-sync" : "refresh"} size={22} color="#FFF" style={styles.iconBotao} />
             <Text style={styles.botaoTexto}>
-              {isModoAPI ? "CADASTRAR E LER API" : "SIMULAR NOVA LEITURA"}
+              {isModoAPI ? "ENVIAR & LER API" : "SIMULAR LEITURA"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -229,16 +220,23 @@ const styles = StyleSheet.create({
   apiToggleText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
   themeToggle: { padding: 8, borderRadius: 20 },
   content: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
+
+  sensorSelector: { marginBottom: 20, alignItems: 'center' },
+  selectorTitle: { fontSize: 14, marginBottom: 8 },
+  selectorButton: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20 },
+  selectorButtonText: { fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
+
   card: { borderRadius: 24, padding: 30, paddingTop: 40, alignItems: 'center', shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 8, position: 'relative' },
   modoBadge: { position: 'absolute', top: -12, paddingHorizontal: 15, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: '#FFF' },
   cardHeader: { alignItems: 'center', marginBottom: 15 },
-  sensorInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
-  labelSensor: { fontSize: 12, fontWeight: '600', marginLeft: 6, letterSpacing: 1 },
-  nomeSensor: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
+  badgeTipo: { backgroundColor: '#333', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 8 },
+  badgeTipoText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', letterSpacing: 1 },
+  nomeSensor: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 5 },
+  dataText: { fontSize: 12, fontStyle: 'italic' },
   divisor: { width: '100%', height: 1, marginBottom: 25 },
   valorContainer: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
   valorDestaque: { fontSize: 80, fontWeight: 'bold', lineHeight: 80 },
-  unidade: { fontSize: 24, fontWeight: '600', marginTop: 10, marginLeft: 2 },
+  unidade: { fontSize: 24, fontWeight: '600', marginTop: 10, marginLeft: 5 },
   badge: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 30, marginBottom: 15 },
   badgeTexto: { fontWeight: '700', fontSize: 14, marginLeft: 8, letterSpacing: 1 },
   idText: { fontSize: 12, fontStyle: 'italic' },
