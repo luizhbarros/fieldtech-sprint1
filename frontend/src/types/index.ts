@@ -3,6 +3,9 @@ export type Sensor = {
     nome: string;
     tipo: string;
     unidade: string;
+    limiteMinimo?: number;
+    limiteMaximo?: number;
+    ativo?: boolean;
 };
 
 export type StatusMedicao = "normal" | "alerta" | "critico";
